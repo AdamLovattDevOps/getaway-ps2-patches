@@ -2,9 +2,10 @@ gametitle=The Getaway (USA) SCUS-97133
 comment=Right analog stick camera (car + on foot), GTA-style rate orbit with auto-return. getaway-decomp v2
 [Right-stick car camera]
 author=adam
-description=On foot: right stick orbits the camera. In car: right stick nudges the view, L2/R2 look left/right, both = look behind.
+description=On foot: right stick orbits (L/R) and pitches (U/D) the camera. In car: right stick nudges the view, L2/R2 look left/right, both = look behind.
 patch=1,EE,0013d164,word,0c0f5bd4
 patch=1,EE,00144e48,word,0c0f5b82
+patch=1,EE,00144e70,word,0c0f5bea
 patch=1,EE,003d6eb0,word,3c08003e
 patch=1,EE,003d6eb4,word,9508c240
 patch=1,EE,003d6eb8,word,3c09003d
@@ -110,6 +111,18 @@ patch=1,EE,003d6e1c,word,0320f825
 patch=1,EE,003d6e20,word,080c2012
 patch=1,EE,003d6e24,word,00000000
 patch=1,EE,003d6e28,word,00000000
+patch=1,EE,003d6fa8,word,c4c4ec28
+patch=1,EE,003d6fac,word,3c01003e
+patch=1,EE,003d6fb0,word,8c21c288
+patch=1,EE,003d6fb4,word,10200006
+patch=1,EE,003d6fb8,word,00000000
+patch=1,EE,003d6fbc,word,c4250004
+patch=1,EE,003d6fc0,word,3c0141c8
+patch=1,EE,003d6fc4,word,44813000
+patch=1,EE,003d6fc8,word,46062942
+patch=1,EE,003d6fcc,word,46052100
+patch=1,EE,003d6fd0,word,03e00008
+patch=1,EE,003d6fd4,word,00000000
 
 [Skip cutscenes with Start]
 author=adam

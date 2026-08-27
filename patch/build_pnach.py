@@ -109,9 +109,21 @@ STUB_CAR=COMPUTE_CAR+4*len(cc)
 assert STUB_CAR+4*len(s_car)<=STATE2, hex(STUB_CAR+4*len(s_car))
 words=[(COMPUTE_CAR+4*i,w) for i,w in enumerate(cc)]+[(STUB_CAR+4*i,w) for i,w in enumerate(s_car)]+[(STATE2,0)]
 words+=[(COMPUTE+4*i,w) for i,w in enumerate(comp)]+[(STUB_FOOT+4*i,w) for i,w in enumerate(s_foot)]+[(STATE,0)]
-patches=[(SITE_CAR,jal(STUB_CAR)),(SITE_FOOT,jal(STUB_FOOT))]+words
+# ---- on-foot pitch: camera height = player.y + 20.0 + RY*PITCH_K (looks at player, so height = pitch) ----
+CAVE_C=0x3d6fa8; CAVE_C_END=0x3d6fe8      # libcdvd "Scmd fail"/"bind err S cmd" strings, error path only
+SITE_PITCH=0x144e70                        # lwc1 f4,-0x13d8(a2)  (a2=0x360000 -> DAT_0035ec28)
+PITCH_K=0x41c80000                         # 25.0 units at full deflection
+A2=6
+pc=[lwc1(4,-0x13d8,A2),                    # original instruction
+    lui(AT,hi(AXES_PTR)), lw(AT,lo(AXES_PTR),AT), beq(AT,ZERO,6), NOP,   # -> jr ra
+    lwc1(5,4,AT),                          # f5 = RY
+    lui(AT,PITCH_K>>16), mtc1(AT,6), fpu(MUL,5,5,6), fpu(ADD,4,4,5),
+    jr(RA), NOP]
+assert CAVE_C+4*len(pc)<=CAVE_C_END
+words+=[(CAVE_C+4*i,w) for i,w in enumerate(pc)]
+patches=[(SITE_CAR,jal(STUB_CAR)),(SITE_FOOT,jal(STUB_FOOT)),(SITE_PITCH,jal(CAVE_C))]+words
 lines=["gametitle=The Getaway (USA) SCUS-97133","comment=Right analog stick camera (car + on foot), GTA-style rate orbit with auto-return. getaway-decomp v2",
-       "[Right-stick car camera]","author=adam","description=On foot: right stick orbits the camera. In car: right stick nudges the view, L2/R2 look left/right, both = look behind."]
+       "[Right-stick car camera]","author=adam","description=On foot: right stick orbits (L/R) and pitches (U/D) the camera. In car: right stick nudges the view, L2/R2 look left/right, both = look behind."]
 lines+=[f"patch={0 if a==STATE2 else 1},EE,{a:08x},word,{w:08x}" for a,w in patches]   # STATE: once at boot, never reset
 # --- cutscene skip: runner FUN_0027edc0 allows skip only if (just-pressed 0x400) && seen-before(cutsceneId)
 lines+=["","[Skip cutscenes with Start]","author=adam","description=Cutscenes can be skipped with Start on first viewing (game normally allows it only on replays).",

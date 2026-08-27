@@ -57,6 +57,9 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
   toward L2:+pi/2, R2:-pi/2, both:pi, none:0 at min(12*dt,1). Buttons u16 at 0x3dc240 (bit0 L2, bit1 R2).
 - Wide persistent orbit in the car looked wrong (camera facing is not a look-at at large angles) — dropped.
 
+- On-foot pitch (v5): cave C 0x3d6fa8 hooks `lwc1 f4,-0x13d8(a2)` @0x144e70 (height const 20.0) and
+  adds RY*25 -> camera height = pitch since the follow-cam looks at the player. f5/f6 free there.
+
 ## Cutscene skip
 - Runner FUN_0027edc0 (cut_sequence). Skip requires just-pressed(state,0x400) [FUN_0026d770 = edge,
   FUN_0026d738 = held, FUN_0026d820 = axis] AND FUN_0029a738(0x3aae28, id) = "seen before" bitfield.
