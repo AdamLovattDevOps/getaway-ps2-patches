@@ -1,0 +1,14 @@
+# game data / derived-from-copyrighted-binary — never commit
+disc/
+ghidra/
+extract.log
+patch/*.patched
+patch/bundled/
+patch/PCSX2.ini.before-osd
+patch/verify.asm
+patch/verify.out
+patch/apply_ini.log
+patch/apply_ini_when_closed.sh
+*.iso
+*.elf
+SCUS_*

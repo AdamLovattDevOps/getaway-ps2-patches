@@ -1,0 +1,4 @@
+//@category Getaway
+import ghidra.app.script.GhidraScript; import ghidra.program.model.listing.*; import ghidra.program.model.symbol.*; import ghidra.program.model.address.*; import java.io.*;
+public class Callers extends GhidraScript { public void run() throws Exception { String[] a=getScriptArgs(); FunctionManager FM=currentProgram.getFunctionManager(); ReferenceManager RM=currentProgram.getReferenceManager();
+  try(PrintWriter pw=new PrintWriter(a[0])){ for(int i=1;i<a.length;i++){ Address t=currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(Long.parseLong(a[i],16)); Function f=FM.getFunctionAt(t); pw.println("== "+a[i]+" "+(f!=null?f.getName():"")); for(Reference r: RM.getReferencesTo(t)){ Function c=FM.getFunctionContaining(r.getFromAddress()); pw.printf("   <- %s @%s\n", c!=null?c.getName():"?", r.getFromAddress()); } } } } }

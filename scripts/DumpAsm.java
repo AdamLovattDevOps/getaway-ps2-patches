@@ -1,0 +1,3 @@
+//@category Getaway
+import ghidra.app.script.GhidraScript; import ghidra.program.model.listing.*; import ghidra.program.model.address.*; import java.io.*;
+public class DumpAsm extends GhidraScript { public void run() throws Exception { String[] a=getScriptArgs(); try(PrintWriter pw=new PrintWriter(a[0])){ for(int i=1;i<a.length;i++){ Function f=getGlobalFunctions(a[i]).get(0); pw.println("== "+f.getName()+" "+f.getEntryPoint()); InstructionIterator it=currentProgram.getListing().getInstructions(f.getBody(),true); while(it.hasNext()){ Instruction in=it.next(); StringBuilder sb=new StringBuilder(); for(byte b: in.getBytes()) sb.append(String.format("%02x",b)); pw.printf("%s %-8s %s\n",in.getAddress(),sb,in); } } } } }
