@@ -123,7 +123,7 @@ pc=[lwc1(4,-0x13d8,A2),                    # original instruction
     jr(RA), NOP]
 assert CAVE_C+4*len(pc)<=FLAGS
 words+=[(CAVE_C+4*i,w) for i,w in enumerate(pc)]
-patches=[(SITE_CAR,jal(STUB_CAR)),(SITE_FOOT,jal(STUB_FOOT)),(SITE_PITCH,jal(CAVE_C))]+words
+patches=[(SITE_CAR,jal(STUB_CAR)),(SITE_FOOT,jal(STUB_FOOT)),(SITE_PITCH,jal(CAVE_C))]+words   # + on-foot free-look hook added below
 lines=["gametitle=The Getaway (USA) SCUS-97133","comment=Right analog stick camera (car + on foot), GTA-style rate orbit with auto-return. getaway-decomp v2",
        "[Right-stick car camera]","author=adam","description=On foot: right stick orbits (L/R) and pitches (U/D) the camera. In car: right stick nudges the view, L2/R2 look left/right, both = look behind."]
 lines+=[f"patch={0 if a==STATE2 else 1},EE,{a:08x},word,{w:08x}" for a,w in patches]   # STATE: once at boot, never reset
@@ -159,40 +159,10 @@ class Asm:
         for i,kind,n,a in s.fix:
             if kind=='j': s.w[i]=j(s.base+4*s.lab[n]); continue
             off=s.lab[n]-(i+1)
-            s.w[i]={'beq':lambda:beq(a[0],a[1],off),'bne':lambda:bne(a[0],a[1],off)}[kind]()
+            s.w[i]={'beq':lambda:beq(a[0],a[1],off),'bne':lambda:bne(a[0],a[1],off),'bc1t':lambda:bc1t(off)}[kind]()
         return s.w
 D=Asm(CAVE_D)
-# ---- buzz: save live regs, call rumble, restore (SAVE area allocated after code) ----
-SAVE_N=9   # a0-a3 v0 v1 t0 ra +spare
-D.label('buzz'); BUZZ=D.pc()
-save_regs=[A0,A1,A2,A3,V0,V1,8,9,RA]   # t0,t1 live in frame fn
-D.emit(lui(AT,0)); SAVE_LUI=[len(D.w)-1]
-for k,r in enumerate(save_regs): D.emit(sw(r,0,AT)); 
-SAVE_OFFS=[(len(D.w)-len(save_regs)+k,k) for k in range(len(save_regs))]
-D.emit(addiu(A0,ZERO,RUMBLE_KIND), jal(RUMBLE), NOP)
-D.emit(lui(AT,0)); SAVE_LUI.append(len(D.w)-1)
-for k,r in enumerate(save_regs): D.emit(lw(r,0,AT))
-SAVE_OFFS+=[(len(D.w)-len(save_regs)+k,k) for k in range(len(save_regs))]
-D.emit(jr(RA), NOP)
-# ---- tick ----
-D.label('tick'); TICK=D.pc()
-D.emit(lui(T3,0x3d), lw(T4,lo(MAGIC),T3), lui(T5,MAGICV>>16), ori(T5,T5,MAGICV&0xffff)); D.br('beq','inited',T4,T5); D.emit(NOP)
-D.emit(sw(T5,lo(MAGIC),T3), sw(ZERO,lo(FLAGS),T3), sw(ZERO,lo(REQ),T3), sw(ZERO,lo(STATE),T3), sw(ZERO,lo(STATE2),T3))
-D.label('inited')
-def sltu(rd,rs,rt): return 0x0000002b|(rs<<21)|(rt<<16)|(rd<<11)
-def sll(rd,rt,sa): return 0x00000000|(rt<<16)|(rd<<11)|(sa<<6)
-def or_(rd,rs,rt): return 0x00000025|(rs<<21)|(rt<<16)|(rd<<11)
-# latch: FLAGS <- bits from REQ bytes (each pnach group writes one byte every vsync), then clear REQ
-D.emit(lbu(T5,lo(REQ),T3),   sltu(T5,ZERO,T5))                                   # bit0 god
-D.emit(lbu(T4,lo(REQ+1),T3), sltu(T4,ZERO,T4), sll(T4,T4,1), or_(T5,T5,T4))      # bit1 ammo
-D.emit(lbu(T4,lo(REQ+2),T3), sltu(T4,ZERO,T4), sll(T4,T4,2), or_(T5,T5,T4))      # bit2 60fps
-D.emit(lw(T4,lo(FLAGS),T3), sw(ZERO,lo(REQ),T3))
-D.emit(addiu(T7,ZERO,0)); D.br('beq','apply',T4,T5); D.emit(NOP); D.emit(addiu(T7,ZERO,1))   # buzz on change
-D.label('apply'); D.emit(sw(T5,lo(FLAGS),T3))
-# 60fps word (write only on change)
-D.label('nobuzz'); D.br('beq','ret',T7,ZERO); D.emit(NOP)
-D.emit(jal(BUZZ), NOP)
-D.label('ret'); D.emit(lui(V1,0x37), jr(RA), NOP)
+BUZZ=TICK=0
 # ---- god: entered by `j` from ApplyDamage+0 (delay slot 'clear f1' ran). a0 = character ----
 D.label('god'); GOD=D.pc()
 D.emit(lui(T2,0x3d), lbu(T2,lo(FLAGS),T2), xori(T2,T2,1)); D.br('bne','normal',T2,ZERO); D.emit(NOP)   # god byte == 1
@@ -212,13 +182,26 @@ D.emit(addiu(V1,V1,-1)); D.label('rl1_ret'); D.emit(jr(RA), NOP)
 D.label('rl2'); RL2=D.pc()
 D.emit(lw(V0,0,V1), lui(AT,0x3d), lbu(AT,lo(FLAGS+1),AT), xori(AT,AT,1)); D.br('beq','rl2_ret',AT,ZERO); D.emit(NOP)
 D.emit(addiu(V0,V0,-1)); D.label('rl2_ret'); D.emit(jr(RA), NOP)
+# ---- on-foot free-look: hook lwc1 f0,-0x13c4(s3) @0x144aa4 (max yaw deviation from facing, 0.1 rad).
+#      Stick deflected -> clamp = pi (free 360); released -> clamp eases back to 0.1 at 3 rad/s. f2-f6 free here.
+CLAMP=0x3d6fe4; SITE_FREE=0x144aa4; S3=19; EASE=0x40400000  # 3.0
+D.label('foot_free'); FOOT_FREE=D.pc()
+D.emit(lwc1(0,-0x13c4,S3), lui(AT,0x3d), lwc1(4,lo(CLAMP),AT))
+D.emit(lui(AT,0x4049), ori(AT,AT,0x0fdb), mtc1(AT,3), fpu(MAX,4,4,0), fpu(MIN,4,4,3))      # C in [0.1,pi]
+D.emit(lui(AT,hi(AXES_PTR)), lw(AT,lo(AXES_PTR),AT)); D.br('beq','ff_rel',AT,ZERO); D.emit(NOP)
+D.emit(lwc1(2,0,AT), fpu(ABS,2,2,0), clt(2,0), NOP); D.br('bc1t','ff_rel'); D.emit(NOP)      # |rx| < 0.1 -> release
+D.emit(fpu(MOV,4,3,0)); D.br('beq','ff_st',ZERO,ZERO); D.emit(NOP)                          # held: C = pi
+D.label('ff_rel'); D.emit(lui(AT,hi(DT)), lwc1(2,lo(DT),AT), lui(AT,EASE>>16), mtc1(AT,3), fpu(MUL,2,2,3), fpu(SUB,4,4,2), fpu(MAX,4,4,0))
+D.label('ff_st'); D.emit(lui(AT,0x3d), swc1(4,lo(CLAMP),AT), fpu(MOV,0,4,0), jr(RA), NOP)
 dw=D.done()
-SAVE=CAVE_D+4*len(dw); assert SAVE+4*len(save_regs)<=CAVE_D_END, hex(SAVE+4*len(save_regs))
-for i in SAVE_LUI: dw[i]=lui(AT,hi(SAVE))
-for i,k in SAVE_OFFS: dw[i]=(dw[i]&0xffff0000)|lo(SAVE+4*k)
+SAVE=CAVE_D+4*len(dw); assert SAVE<=CAVE_D_END, hex(SAVE)
 TRAINER_ENABLED=True    # joker mode (PS2-era cheat-device style): no per-frame code hook; pnach D-codes watch the pad word and write flag bytes
 trainer=[(CAVE_D+4*i,w) for i,w in enumerate(dw)]
 trainer+=[(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]   # tick hook (0x1f10cc) REMOVED: it caused several-x game speed
+# free-look belongs to the camera group: emit its words + hook there
+FF=[(FOOT_FREE+4*i,dw[(FOOT_FREE-CAVE_D)//4+i]) for i in range(len(dw)-(FOOT_FREE-CAVE_D)//4)]
+trainer=[t for t in trainer if not (FOOT_FREE<=t[0]<SAVE)]
+patches+= FF+[(SITE_FREE,jal(FOOT_FREE))]
 if not TRAINER_ENABLED: trainer=[]
 trainer_state=[]   # state self-inits via MAGIC
 if TRAINER_ENABLED:
@@ -230,7 +213,7 @@ if TRAINER_ENABLED:
     lines+=["","[God mode]","author=adam","description=Player takes no damage.", f"patch=1,EE,{FLAGS:08x},byte,00000001"]
     lines+=["","[Infinite ammo + no reload]","author=adam","description=Ammo and clip never decrease.", f"patch=1,EE,{FLAGS+1:08x},byte,00000001"]
 EXTRA=trainer+trainer_state
-print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
+print(f"trainer: foot_free={FOOT_FREE:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
 
 # --- cutscene skip: runner FUN_0027edc0 allows skip only if (just-pressed 0x400) && seen-before(cutsceneId)
 lines+=["","[Skip cutscenes with Start]","author=adam","description=Cutscenes can be skipped with Start on first viewing (game normally allows it only on replays).",

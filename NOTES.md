@@ -60,6 +60,15 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
 - On-foot pitch (v5): cave C 0x3d6fa8 hooks `lwc1 f4,-0x13d8(a2)` @0x144e70 (height const 20.0) and
   adds RY*25 -> camera height = pitch since the follow-cam looks at the player. f5/f6 free there.
 
+## On-foot free-look (v6)
+- PlayerCameraController yaw state machine: tracker object 0x35ebc8 {+0 state, +4 yaw=DAT_0035ebcc,
+  +8, +0xc target=DAT_0035ebd4, +0x10 params}. In normal state 1 the yaw is re-derived each frame from
+  atan2(cam - player) (FUN_0014e820 snaps all three), then CLAMPED to target ± DAT_0035ec3c = 0.1 rad.
+  That 6 degree clamp was why the stick could not orbit on foot.
+- Hook 0x144aa4 (lwc1 f0,-0x13c4(s3)): stub keeps a persistent clamp C at 0x3d6fe4, forced into [0.1,pi]
+  every frame (so ELF garbage init is harmless); stick deflected -> C = pi; released -> C -= 3*dt down to 0.1
+  (camera glides back behind the player instead of snapping). f2-f6 free at that site.
+
 ## Cutscene skip
 - Runner FUN_0027edc0 (cut_sequence). Skip requires just-pressed(state,0x400) [FUN_0026d770 = edge,
   FUN_0026d738 = held, FUN_0026d820 = axis] AND FUN_0029a738(0x3aae28, id) = "seen before" bitfield.
