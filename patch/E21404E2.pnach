@@ -124,9 +124,9 @@ patch=1,EE,003d6fcc,word,46052100
 patch=1,EE,003d6fd0,word,03e00008
 patch=1,EE,003d6fd4,word,00000000
 
-[Trainer (R1+Square god, R1+Cross ammo, R1+Triangle 60fps)]
+[Trainer core (required by the toggles below)]
 author=adam
-description=Hold R1 and tap Square = invincible (toggle), Cross = infinite ammo/no reload, Triangle = 60 FPS. Controller buzzes on toggle.
+description=Hooks for the God mode / Infinite ammo / 60 FPS toggles. Toggle those from PCSX2's pause menu (Big Picture > Game Properties > Cheats).
 patch=1,EE,003d6fe8,word,3c01003d
 patch=1,EE,003d6fec,word,ac2471bc
 patch=1,EE,003d6ff0,word,ac2571c0
@@ -152,32 +152,32 @@ patch=1,EE,003d703c,word,8c2971d8
 patch=1,EE,003d7040,word,8c3f71dc
 patch=1,EE,003d7044,word,03e00008
 patch=1,EE,003d7048,word,00000000
-patch=1,EE,003d704c,word,3c0a003e
-patch=1,EE,003d7050,word,954ac240
-patch=1,EE,003d7054,word,3c0b003d
-patch=1,EE,003d7058,word,8d6c6fdc
-patch=1,EE,003d705c,word,ad6a6fdc
-patch=1,EE,003d7060,word,8d6d6fd8
-patch=1,EE,003d7064,word,01806027
-patch=1,EE,003d7068,word,018a6024
-patch=1,EE,003d706c,word,240f0000
-patch=1,EE,003d7070,word,314e0008
-patch=1,EE,003d7074,word,11c00010
-patch=1,EE,003d7078,word,00000000
-patch=1,EE,003d707c,word,318e0080
-patch=1,EE,003d7080,word,11c00003
-patch=1,EE,003d7084,word,00000000
-patch=1,EE,003d7088,word,39ad0001
-patch=1,EE,003d708c,word,240f0001
-patch=1,EE,003d7090,word,318e0040
-patch=1,EE,003d7094,word,11c00003
-patch=1,EE,003d7098,word,00000000
-patch=1,EE,003d709c,word,39ad0002
-patch=1,EE,003d70a0,word,240f0001
-patch=1,EE,003d70a4,word,318e0010
-patch=1,EE,003d70a8,word,11c00003
-patch=1,EE,003d70ac,word,00000000
-patch=1,EE,003d70b0,word,39ad0004
+patch=1,EE,003d704c,word,3c0b003d
+patch=1,EE,003d7050,word,8d6c6fe0
+patch=1,EE,003d7054,word,3c0d600d
+patch=1,EE,003d7058,word,35adf00d
+patch=1,EE,003d705c,word,118d0006
+patch=1,EE,003d7060,word,00000000
+patch=1,EE,003d7064,word,ad6d6fe0
+patch=1,EE,003d7068,word,ad606fd8
+patch=1,EE,003d706c,word,ad606fdc
+patch=1,EE,003d7070,word,ad606e28
+patch=1,EE,003d7074,word,ad606f84
+patch=1,EE,003d7078,word,916d6fdc
+patch=1,EE,003d707c,word,000d682b
+patch=1,EE,003d7080,word,916c6fdd
+patch=1,EE,003d7084,word,000c602b
+patch=1,EE,003d7088,word,000c6040
+patch=1,EE,003d708c,word,01ac6825
+patch=1,EE,003d7090,word,916c6fde
+patch=1,EE,003d7094,word,000c602b
+patch=1,EE,003d7098,word,000c6080
+patch=1,EE,003d709c,word,01ac6825
+patch=1,EE,003d70a0,word,8d6c6fd8
+patch=1,EE,003d70a4,word,ad606fdc
+patch=1,EE,003d70a8,word,240f0000
+patch=1,EE,003d70ac,word,118d0002
+patch=1,EE,003d70b0,word,00000000
 patch=1,EE,003d70b4,word,240f0001
 patch=1,EE,003d70b8,word,ad6d6fd8
 patch=1,EE,003d70bc,word,3c0a001f
@@ -249,8 +249,21 @@ patch=1,EE,00174ba0,word,080f5c43
 patch=1,EE,001751b0,word,0c0f5c54
 patch=1,EE,001ad92c,word,0c0f5c5d
 patch=1,EE,001ad9c8,word,0c0f5c66
-patch=0,EE,003d6fd8,word,00000000
-patch=0,EE,003d6fdc,word,00000000
+
+[God mode]
+author=adam
+description=Player takes no damage.
+patch=1,EE,003d6fdc,byte,00000001
+
+[Infinite ammo + no reload]
+author=adam
+description=Ammo and clip never decrease.
+patch=1,EE,003d6fdd,byte,00000001
+
+[60 FPS (toggleable)]
+author=adam
+description=Runs the game at 60 FPS. Needs EE overclock.
+patch=1,EE,003d6fde,byte,00000001
 
 [Skip cutscenes with Start]
 author=adam

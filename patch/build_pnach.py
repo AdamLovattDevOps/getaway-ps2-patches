@@ -7,6 +7,7 @@ import struct
 SIN=0x308048; AXES_PTR=0x3dc288; DT=0x3741fc
 CAVE=0x3d6d58; CAVE_END=0x3d6e4c
 CAVE_B=0x3d6eb0; CAVE_B_END=0x3d6f88     # libcdvd debug printf strings, unreferenced
+FLAGS=0x3d6fd8; REQ=0x3d6fdc; MAGIC=0x3d6fe0; MAGICV=0x600DF00D   # spare words after cave C; REQ written by pnach groups, latched into FLAGS each frame
 SITE_CAR=0x13d164; SITE_FOOT=0x144e48
 RATE=0xc0600000   # -3.5 rad/s at full deflection (negative = fixes the flipped direction)
 RETURN=0x40c00000 # 6.0 /s return-to-centre
@@ -119,7 +120,7 @@ pc=[lwc1(4,-0x13d8,A2),                    # original instruction
     lwc1(5,4,AT),                          # f5 = RY
     lui(AT,PITCH_K>>16), mtc1(AT,6), fpu(MUL,5,5,6), fpu(ADD,4,4,5),
     jr(RA), NOP]
-assert CAVE_C+4*len(pc)<=CAVE_C_END
+assert CAVE_C+4*len(pc)<=FLAGS
 words+=[(CAVE_C+4*i,w) for i,w in enumerate(pc)]
 patches=[(SITE_CAR,jal(STUB_CAR)),(SITE_FOOT,jal(STUB_FOOT)),(SITE_PITCH,jal(CAVE_C))]+words
 lines=["gametitle=The Getaway (USA) SCUS-97133","comment=Right analog stick camera (car + on foot), GTA-style rate orbit with auto-return. getaway-decomp v2",
@@ -129,7 +130,6 @@ lines+=[f"patch={0 if a==STATE2 else 1},EE,{a:08x},word,{w:08x}" for a,w in patc
 # ===================== TRAINER (toggles) =====================
 # Per-frame tick hooked at 0x1f10cc (lui v1,0x37 in frame fn FUN_001f0eb0; ra stack-saved, t0 LIVE, v0/v1/a* live).
 # R1 held + newly-pressed: Square -> god (bit0), Cross -> ammo+no-reload (bit1), Triangle -> 60fps (bit2). Rumble ack.
-FLAGS=0x3d6fd8; PREV=0x3d6fdc                 # spare words after cave C
 CAVE_D=0x3d6fe8; CAVE_D_END=0x3d71ec          # sce libcdvd error strings (error path only)
 SITE_TICK=0x1f10cc; TICK_RET=0x1f10d0
 SITE_60=0x1f10e8; W60_ON=0x1000000b; W60_OFF=0x1500000b
@@ -175,15 +175,19 @@ SAVE_OFFS+=[(len(D.w)-len(save_regs)+k,k) for k in range(len(save_regs))]
 D.emit(jr(RA), NOP)
 # ---- tick ----
 D.label('tick'); TICK=D.pc()
-D.emit(lui(T2,hi(BUTTONS)), lhu(T2,lo(BUTTONS),T2))          # cur
-D.emit(lui(T3,0x3d), lw(T4,lo(PREV),T3), sw(T2,lo(PREV),T3), lw(T5,lo(FLAGS),T3))
-D.emit(nor(T4,T4,ZERO), and_(T4,T4,T2))                       # newly pressed
-D.emit(addiu(T7,ZERO,0))                                      # buzz pending = 0
-D.emit(andi(T6,T2,R1)); D.br('beq','apply',T6,ZERO); D.emit(NOP)
-for btn,bit,nxt in [(SQUARE,1,'c2'),(CROSS,2,'c3'),(TRIANGLE,4,'apply')]:
-    D.emit(andi(T6,T4,btn)); D.br('beq',nxt,T6,ZERO); D.emit(NOP)
-    D.emit(xori(T5,T5,bit), addiu(T7,ZERO,1))
-    D.label(nxt)
+D.emit(lui(T3,0x3d), lw(T4,lo(MAGIC),T3), lui(T5,MAGICV>>16), ori(T5,T5,MAGICV&0xffff)); D.br('beq','inited',T4,T5); D.emit(NOP)
+D.emit(sw(T5,lo(MAGIC),T3), sw(ZERO,lo(FLAGS),T3), sw(ZERO,lo(REQ),T3), sw(ZERO,lo(STATE),T3), sw(ZERO,lo(STATE2),T3))
+D.label('inited')
+def lbu(rt,off,base): return 0x90000000|(base<<21)|(rt<<16)|(off&0xffff)
+def sltu(rd,rs,rt): return 0x0000002b|(rs<<21)|(rt<<16)|(rd<<11)
+def sll(rd,rt,sa): return 0x00000000|(rt<<16)|(rd<<11)|(sa<<6)
+def or_(rd,rs,rt): return 0x00000025|(rs<<21)|(rt<<16)|(rd<<11)
+# latch: FLAGS <- bits from REQ bytes (each pnach group writes one byte every vsync), then clear REQ
+D.emit(lbu(T5,lo(REQ),T3),   sltu(T5,ZERO,T5))                                   # bit0 god
+D.emit(lbu(T4,lo(REQ+1),T3), sltu(T4,ZERO,T4), sll(T4,T4,1), or_(T5,T5,T4))      # bit1 ammo
+D.emit(lbu(T4,lo(REQ+2),T3), sltu(T4,ZERO,T4), sll(T4,T4,2), or_(T5,T5,T4))      # bit2 60fps
+D.emit(lw(T4,lo(FLAGS),T3), sw(ZERO,lo(REQ),T3))
+D.emit(addiu(T7,ZERO,0)); D.br('beq','apply',T4,T5); D.emit(NOP); D.emit(addiu(T7,ZERO,1))   # buzz on change
 D.label('apply'); D.emit(sw(T5,lo(FLAGS),T3))
 # 60fps word (write only on change)
 D.emit(lui(T2,hi(SITE_60)), lw(T4,lo(SITE_60),T2), andi(T6,T5,4)); D.br('beq','off60',T6,ZERO); D.emit(NOP)
@@ -218,10 +222,13 @@ for i in SAVE_LUI: dw[i]=lui(AT,hi(SAVE))
 for i,k in SAVE_OFFS: dw[i]=(dw[i]&0xffff0000)|lo(SAVE+4*k)
 trainer=[(CAVE_D+4*i,w) for i,w in enumerate(dw)]
 trainer+=[(SITE_TICK,jal(TICK)),(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]
-trainer_state=[(FLAGS,0),(PREV,0)]
-lines+=["","[Trainer (R1+Square god, R1+Cross ammo, R1+Triangle 60fps)]","author=adam",
-        "description=Hold R1 and tap Square = invincible (toggle), Cross = infinite ammo/no reload, Triangle = 60 FPS. Controller buzzes on toggle."]
-lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]+[f"patch=0,EE,{a:08x},word,{w:08x}" for a,w in trainer_state]
+trainer_state=[]   # state self-inits via MAGIC
+lines+=["","[Trainer core (required by the toggles below)]","author=adam","description=Hooks for the God mode / Infinite ammo / 60 FPS toggles. Toggle those from PCSX2's pause menu (Big Picture > Game Properties > Cheats)."]
+lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]
+# each toggle group ORs its bit into REQ every vsync via PCSX2's 'bitor' type? not available -> use separate REQ bytes
+lines+=["","[God mode]","author=adam","description=Player takes no damage.",f"patch=1,EE,{REQ:08x},byte,00000001"]
+lines+=["","[Infinite ammo + no reload]","author=adam","description=Ammo and clip never decrease.",f"patch=1,EE,{REQ+1:08x},byte,00000001"]
+lines+=["","[60 FPS (toggleable)]","author=adam","description=Runs the game at 60 FPS. Needs EE overclock.",f"patch=1,EE,{REQ+2:08x},byte,00000001"]
 EXTRA=trainer+trainer_state
 print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
 
