@@ -190,10 +190,6 @@ D.emit(lw(T4,lo(FLAGS),T3), sw(ZERO,lo(REQ),T3))
 D.emit(addiu(T7,ZERO,0)); D.br('beq','apply',T4,T5); D.emit(NOP); D.emit(addiu(T7,ZERO,1))   # buzz on change
 D.label('apply'); D.emit(sw(T5,lo(FLAGS),T3))
 # 60fps word (write only on change)
-D.emit(lui(T2,hi(SITE_60)), lw(T4,lo(SITE_60),T2), andi(T6,T5,4)); D.br('beq','off60',T6,ZERO); D.emit(NOP)
-D.emit(lui(T6,W60_ON>>16)); D.br('beq','st60',ZERO,ZERO); D.emit(ori(T6,T6,W60_ON&0xffff))
-D.label('off60'); D.emit(lui(T6,W60_OFF>>16), ori(T6,T6,W60_OFF&0xffff))
-D.label('st60'); D.br('beq','nobuzz',T4,T6); D.emit(NOP); D.emit(sw(T6,lo(SITE_60),T2))
 D.label('nobuzz'); D.br('beq','ret',T7,ZERO); D.emit(NOP)
 D.emit(jal(BUZZ), NOP)
 D.label('ret'); D.emit(lui(V1,0x37), jr(RA), NOP)
@@ -223,12 +219,11 @@ for i,k in SAVE_OFFS: dw[i]=(dw[i]&0xffff0000)|lo(SAVE+4*k)
 trainer=[(CAVE_D+4*i,w) for i,w in enumerate(dw)]
 trainer+=[(SITE_TICK,jal(TICK)),(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]
 trainer_state=[]   # state self-inits via MAGIC
-lines+=["","[Trainer core (required by the toggles below)]","author=adam","description=Hooks for the God mode / Infinite ammo / 60 FPS toggles. Toggle those from PCSX2's pause menu (Big Picture > Game Properties > Cheats)."]
+lines+=["","[Trainer core (required by the toggles below)]","author=adam","description=Hooks for the God mode / Infinite ammo toggles. Toggle those from PCSX2's pause menu (Big Picture > Game Properties > Cheats)."]
 lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]
 # each toggle group ORs its bit into REQ every vsync via PCSX2's 'bitor' type? not available -> use separate REQ bytes
 lines+=["","[God mode]","author=adam","description=Player takes no damage.",f"patch=1,EE,{REQ:08x},byte,00000001"]
 lines+=["","[Infinite ammo + no reload]","author=adam","description=Ammo and clip never decrease.",f"patch=1,EE,{REQ+1:08x},byte,00000001"]
-lines+=["","[60 FPS (toggleable)]","author=adam","description=Runs the game at 60 FPS. Needs EE overclock.",f"patch=1,EE,{REQ+2:08x},byte,00000001"]
 EXTRA=trainer+trainer_state
 print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
 

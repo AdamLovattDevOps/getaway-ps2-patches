@@ -92,6 +92,8 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
   Disable the group -> the byte stops being written -> next tick latches 0. Stubs read FLAGS.
 - MAGIC word 0x3d6fe0 (never pnach-written; boots as ELF string bytes) gates a one-time zero of
   FLAGS/REQ/STATE/STATE2 — robust regardless of whether patch=0 runs before or after ELF load.
+- 60 FPS REMOVED 2026-08-27 (Adam: 'causes too many issues' — reported super speed; dt is vsync-based so
+  the cause is unresolved; bundled patch left disabled, EECycleRate back to 0).
 - Launcher runs `-bigpicture`; existing hotkey OpenPauseMenu = Back+RightStick (Select+R3).
 - Drawing our own text would mean driving MenuString/TextBox glyph lists (FUN_00249ae0) — deferred.
 
