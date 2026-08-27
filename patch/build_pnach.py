@@ -125,12 +125,113 @@ patches=[(SITE_CAR,jal(STUB_CAR)),(SITE_FOOT,jal(STUB_FOOT)),(SITE_PITCH,jal(CAV
 lines=["gametitle=The Getaway (USA) SCUS-97133","comment=Right analog stick camera (car + on foot), GTA-style rate orbit with auto-return. getaway-decomp v2",
        "[Right-stick car camera]","author=adam","description=On foot: right stick orbits (L/R) and pitches (U/D) the camera. In car: right stick nudges the view, L2/R2 look left/right, both = look behind."]
 lines+=[f"patch={0 if a==STATE2 else 1},EE,{a:08x},word,{w:08x}" for a,w in patches]   # STATE: once at boot, never reset
+
+# ===================== TRAINER (toggles) =====================
+# Per-frame tick hooked at 0x1f10cc (lui v1,0x37 in frame fn FUN_001f0eb0; ra stack-saved, t0 LIVE, v0/v1/a* live).
+# R1 held + newly-pressed: Square -> god (bit0), Cross -> ammo+no-reload (bit1), Triangle -> 60fps (bit2). Rumble ack.
+FLAGS=0x3d6fd8; PREV=0x3d6fdc                 # spare words after cave C
+CAVE_D=0x3d6fe8; CAVE_D_END=0x3d71ec          # sce libcdvd error strings (error path only)
+SITE_TICK=0x1f10cc; TICK_RET=0x1f10d0
+SITE_60=0x1f10e8; W60_ON=0x1000000b; W60_OFF=0x1500000b
+SITE_GOD=0x174ba0; GOD_RESUME=0x174ba8; GAME_PTR=0x3aae48
+SITE_AMMO=0x1751b0; SITE_RELOAD1=0x1ad92c; SITE_RELOAD2=0x1ad9c8
+RUMBLE=0x26da30; RUMBLE_KIND=3
+R1,SQUARE,CROSS,TRIANGLE=0x0008,0x0080,0x0040,0x0010
+T2,T3,T4,T5,T6,T7,V0,V1,A0,A1,A2,A3=10,11,12,13,14,15,2,3,4,5,6,7
+def sw(rt,off,base): return 0xac000000|(base<<21)|(rt<<16)|(off&0xffff)
+def lhu(rt,off,base): return 0x94000000|(base<<21)|(rt<<16)|(off&0xffff)
+def andi(rt,rs,imm): return 0x30000000|(rs<<21)|(rt<<16)|(imm&0xffff)
+def xori(rt,rs,imm): return 0x38000000|(rs<<21)|(rt<<16)|(imm&0xffff)
+def bne(rs,rt,off): return 0x14000000|(rs<<21)|(rt<<16)|(off&0xffff)
+def nor(rd,rs,rt): return 0x00000027|(rs<<21)|(rt<<16)|(rd<<11)
+def and_(rd,rs,rt): return 0x00000024|(rs<<21)|(rt<<16)|(rd<<11)
+def addiu(rt,rs,imm): return 0x24000000|(rs<<21)|(rt<<16)|(imm&0xffff)
+class Asm:
+    def __init__(s,base): s.base=base; s.w=[]; s.lab={}; s.fix=[]
+    def pc(s): return s.base+4*len(s.w)
+    def emit(s,*ws): s.w.extend(ws)
+    def label(s,n): s.lab[n]=len(s.w)
+    def br(s,kind,n,*a):   # branch to label, delay slot nop appended by caller
+        s.fix.append((len(s.w),kind,n,a)); s.w.append(0)
+    def jto(s,n): s.fix.append((len(s.w),'j',n,())); s.w.append(0)
+    def done(s):
+        for i,kind,n,a in s.fix:
+            if kind=='j': s.w[i]=j(s.base+4*s.lab[n]); continue
+            off=s.lab[n]-(i+1)
+            s.w[i]={'beq':lambda:beq(a[0],a[1],off),'bne':lambda:bne(a[0],a[1],off)}[kind]()
+        return s.w
+D=Asm(CAVE_D)
+# ---- buzz: save live regs, call rumble, restore (SAVE area allocated after code) ----
+SAVE_N=9   # a0-a3 v0 v1 t0 ra +spare
+D.label('buzz'); BUZZ=D.pc()
+save_regs=[A0,A1,A2,A3,V0,V1,8,9,RA]   # t0,t1 live in frame fn
+D.emit(lui(AT,0)); SAVE_LUI=[len(D.w)-1]
+for k,r in enumerate(save_regs): D.emit(sw(r,0,AT)); 
+SAVE_OFFS=[(len(D.w)-len(save_regs)+k,k) for k in range(len(save_regs))]
+D.emit(addiu(A0,ZERO,RUMBLE_KIND), jal(RUMBLE), NOP)
+D.emit(lui(AT,0)); SAVE_LUI.append(len(D.w)-1)
+for k,r in enumerate(save_regs): D.emit(lw(r,0,AT))
+SAVE_OFFS+=[(len(D.w)-len(save_regs)+k,k) for k in range(len(save_regs))]
+D.emit(jr(RA), NOP)
+# ---- tick ----
+D.label('tick'); TICK=D.pc()
+D.emit(lui(T2,hi(BUTTONS)), lhu(T2,lo(BUTTONS),T2))          # cur
+D.emit(lui(T3,0x3d), lw(T4,lo(PREV),T3), sw(T2,lo(PREV),T3), lw(T5,lo(FLAGS),T3))
+D.emit(nor(T4,T4,ZERO), and_(T4,T4,T2))                       # newly pressed
+D.emit(addiu(T7,ZERO,0))                                      # buzz pending = 0
+D.emit(andi(T6,T2,R1)); D.br('beq','apply',T6,ZERO); D.emit(NOP)
+for btn,bit,nxt in [(SQUARE,1,'c2'),(CROSS,2,'c3'),(TRIANGLE,4,'apply')]:
+    D.emit(andi(T6,T4,btn)); D.br('beq',nxt,T6,ZERO); D.emit(NOP)
+    D.emit(xori(T5,T5,bit), addiu(T7,ZERO,1))
+    D.label(nxt)
+D.label('apply'); D.emit(sw(T5,lo(FLAGS),T3))
+# 60fps word (write only on change)
+D.emit(lui(T2,hi(SITE_60)), lw(T4,lo(SITE_60),T2), andi(T6,T5,4)); D.br('beq','off60',T6,ZERO); D.emit(NOP)
+D.emit(lui(T6,W60_ON>>16)); D.br('beq','st60',ZERO,ZERO); D.emit(ori(T6,T6,W60_ON&0xffff))
+D.label('off60'); D.emit(lui(T6,W60_OFF>>16), ori(T6,T6,W60_OFF&0xffff))
+D.label('st60'); D.br('beq','nobuzz',T4,T6); D.emit(NOP); D.emit(sw(T6,lo(SITE_60),T2))
+D.label('nobuzz'); D.br('beq','ret',T7,ZERO); D.emit(NOP)
+D.emit(jal(BUZZ), NOP)
+D.label('ret'); D.emit(lui(V1,0x37), jr(RA), NOP)
+# ---- god: entered by `j` from ApplyDamage+0 (delay slot 'clear f1' ran). a0 = character ----
+D.label('god'); GOD=D.pc()
+D.emit(lui(T2,0x3d), lw(T2,lo(FLAGS),T2), andi(T2,T2,1)); D.br('beq','normal',T2,ZERO); D.emit(NOP)
+D.emit(lui(T3,hi(GAME_PTR)), lw(T3,lo(GAME_PTR),T3)); D.br('beq','normal',T3,ZERO); D.emit(NOP)
+D.emit(lw(T3,0x10,T3)); D.br('bne','normal',T3,A0); D.emit(NOP)
+D.emit(jr(RA), NOP)                                           # player + god: no damage
+D.label('normal'); D.emit(addiu(29,29,-0x20), j(GOD_RESUME), NOP)
+# ---- ammo: hook lw a0,0(a1) @0x1751b0; delay slot did subu v1,v1,v0; next insn v1 = a0 - v1 ----
+D.label('ammo'); AMMO=D.pc()
+D.emit(lw(A0,0,A1), lui(AT,0x3d), lw(AT,lo(FLAGS),AT), andi(AT,AT,2)); D.br('beq','ammo_ret',AT,ZERO); D.emit(NOP)
+D.emit(addiu(V1,ZERO,0)); D.label('ammo_ret'); D.emit(jr(RA), NOP)
+# ---- reload1: hook lw v1,0(a0) @0x1ad92c (delay slot addiu v1,-1 on stale v1, we redo) ----
+D.label('rl1'); RL1=D.pc()
+D.emit(lw(V1,0,A0), lui(AT,0x3d), lw(AT,lo(FLAGS),AT), andi(AT,AT,2)); D.br('bne','rl1_ret',AT,ZERO); D.emit(NOP)
+D.emit(addiu(V1,V1,-1)); D.label('rl1_ret'); D.emit(jr(RA), NOP)
+# ---- reload2: hook lw v0,0(v1) @0x1ad9c8 ----
+D.label('rl2'); RL2=D.pc()
+D.emit(lw(V0,0,V1), lui(AT,0x3d), lw(AT,lo(FLAGS),AT), andi(AT,AT,2)); D.br('bne','rl2_ret',AT,ZERO); D.emit(NOP)
+D.emit(addiu(V0,V0,-1)); D.label('rl2_ret'); D.emit(jr(RA), NOP)
+dw=D.done()
+SAVE=CAVE_D+4*len(dw); assert SAVE+4*len(save_regs)<=CAVE_D_END, hex(SAVE+4*len(save_regs))
+for i in SAVE_LUI: dw[i]=lui(AT,hi(SAVE))
+for i,k in SAVE_OFFS: dw[i]=(dw[i]&0xffff0000)|lo(SAVE+4*k)
+trainer=[(CAVE_D+4*i,w) for i,w in enumerate(dw)]
+trainer+=[(SITE_TICK,jal(TICK)),(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]
+trainer_state=[(FLAGS,0),(PREV,0)]
+lines+=["","[Trainer (R1+Square god, R1+Cross ammo, R1+Triangle 60fps)]","author=adam",
+        "description=Hold R1 and tap Square = invincible (toggle), Cross = infinite ammo/no reload, Triangle = 60 FPS. Controller buzzes on toggle."]
+lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]+[f"patch=0,EE,{a:08x},word,{w:08x}" for a,w in trainer_state]
+EXTRA=trainer+trainer_state
+print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
+
 # --- cutscene skip: runner FUN_0027edc0 allows skip only if (just-pressed 0x400) && seen-before(cutsceneId)
 lines+=["","[Skip cutscenes with Start]","author=adam","description=Cutscenes can be skipped with Start on first viewing (game normally allows it only on replays).",
         "patch=1,EE,0027f6bc,word,24050c00",   # li a1,0x400 -> li a1,0xc00  (Start | original)
         "patch=1,EE,0027f6d8,word,24020001"]   # jal seen_before() -> li v0,1
-open('patch/E21404E2.pnach','w').write("\n".join(lines)+"\n")
 d=bytearray(open('disc/SCUS_971.33','rb').read())
-for a,w in patches: struct.pack_into('<I',d,a-0x100000+0x1000,w)
-open('patch/SCUS_971.33.patched','wb').write(d)
+for a,w in patches+EXTRA: struct.pack_into('<I',d,a-0x100000+0x1000,w)
 print(f"compute_car={COMPUTE_CAR:08x} ({len(cc)} w) state2={STATE2:08x}  compute={COMPUTE:08x} ({len(comp)} w) stub_car={STUB_CAR:08x} stub_foot={STUB_FOOT:08x} state={STATE:08x} patches={len(patches)}")
+
+open('patch/E21404E2.pnach','w').write("\n".join(lines)+"\n")
+open('patch/SCUS_971.33.patched','wb').write(d)

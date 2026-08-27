@@ -68,6 +68,23 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
 - Button word layout: (rawbyte2<<8|rawbyte3): 0x100 sel,0x200 L3,0x400 R3,0x800 start,0x1000 up,
   0x2000 right,0x4000 down,0x8000 left; 0x1 L2,0x2 R2,0x4 L1,0x8 R1,0x10 tri,0x20 circ,0x40 X,0x80 sq.
 
+## Trainer (toggles) — cave D 0x3d6fe8..0x3d71ec, flags @0x3d6fd8, prev-buttons @0x3d6fdc
+- Existing CodeBreaker codes (almarsguides, CB v1-encrypted addresses) decoded with CB2crypt's
+  CB1DecryptCode (seedtable[3][16]): ammo NOP @0x1751c0 (sw v1,0(a1) in FUN_00175070), never-reload
+  NOPs @0x1ad938/0x1ad9d0 (FUN_001acfb8), immune @0x1acba0 (= PlayerCharacter vtable slot 5),
+  enemies-don't-shoot @0x178e70, health hack @0x18e4cc/dc (FUN_0018e390). Values were plain MIPS —
+  matching them against the ELF is a sanity check for the decrypt.
+- Health: Character +0x360 float, +0x22c max, +0x74 percent. ApplyDamage = FUN_00174ba0 (vtable slot 9,
+  a0 = character, f12 = amount); its only caller FUN_0017e038 is the TakeDamage virtual.
+- Player = *(*(0x3aae48)+0x10)  (PlayerCharacter, vtable 0x3c7fb8 at +0x448; ctor in FUN_00296318).
+- Per-frame tick hooked at 0x1f10cc (frame fn FUN_001f0eb0, which also holds the 60fps `bne` @0x1f10e8).
+  t0 AND t1 are live there -> the rumble call path saves a0-a3,v0,v1,t0,t1,ra. Combos: R1 held +
+  newly-pressed Square/Cross/Triangle -> flags bit0 god / bit1 ammo+reload / bit2 60fps; rumble
+  FUN_0026da30(3) as ack. 60fps toggle = write 0x1f10e8 word (0x1000000b on / 0x1500000b off) only on change.
+- Delay-slot rules that shaped the hooks: never replace a delay-slot instruction (ammo sw) or one followed
+  by a branch (jal's delay slot may not be a branch); hook the preceding load and redo the op in the stub.
+  ApplyDamage entry hooked with `j` (not jal) so the caller's ra survives; god = plain `jr ra`.
+
 ## PCSX2 / performance
 - CRC E21404E2 (= XOR of u32 words of the ELF; confirmed by PCSX2's gamesettings filename).
 - pnach in `~/.config/PCSX2/cheats/E21404E2.pnach`; labeled group + `[Cheats] Enable = <name>`
