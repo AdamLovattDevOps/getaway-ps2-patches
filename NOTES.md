@@ -85,7 +85,16 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
   by a branch (jal's delay slot may not be a branch); hook the preceding load and redo the op in the stub.
   ApplyDamage entry hooked with `j` (not jal) so the caller's ra survives; god = plain `jr ra`.
 
-## Trainer DISABLED (TRAINER_ENABLED=False) 2026-08-27
+## Trainer v3 — joker mode (PS2 cheat-device best practice)
+- EE overclock exonerated by test (camera-only + EECycleRate 3 ran fine) -> the trainer's per-frame tick
+  hook inside the vsync/frame function (0x1f10cc) is the speed culprit. Rule: never hook game timing
+  code; a cheat device pokes memory at vsync from OUTSIDE the game — pnach can do the same.
+- pnach `extended` D-codes: `D0<addr>,extended,0000vvvv` = if u16 at addr == vvvv apply next line.
+  Watch the held-buttons word 0x3dc240: R1+Square -> FLAGS byte0=1 (god), R1+Circle -> 0,
+  R1+Cross -> byte1=1 (ammo+reload), R1+Triangle -> 0. Stubs test byte == 1 exactly so leftover ELF
+  string bytes at the flag words can't enable anything at boot. No rumble (would need code).
+
+## (history) Trainer DISABLED 2026-08-27
 - With trainer core active (no 60fps), gameplay ran several x speed ("car falls backward, world flies by").
   Suspects, untested: the tick hook at 0x1f10cc inside the frame/vsync function (a jal mid-function in
   timing code), or PCSX2 recompiler interaction with the self-init writes. Cheat sites themselves

@@ -80,6 +80,7 @@ CAVE_B=0x3d6eb0; CAVE_B_END=0x3d6f88     # libcdvd debug printf strings, unrefer
 BUTTONS=0x3dc240                          # u16 held-buttons word of pad0 state (bit0=L2, bit1=R2)
 STATE2=CAVE_B_END-4
 SNAP=0x41400000                           # 12.0 /s ease rate (min(dt*SNAP,1))
+def lbu(rt,off,base): return 0x90000000|(base<<21)|(rt<<16)|(off&0xffff)
 def lhu(rt,off,base): return 0x94000000|(base<<21)|(rt<<16)|(off&0xffff)
 def andi(rt,rs,imm): return 0x30000000|(rs<<21)|(rt<<16)|(imm&0xffff)
 def xori(rt,rs,imm): return 0x38000000|(rs<<21)|(rt<<16)|(imm&0xffff)
@@ -178,7 +179,6 @@ D.label('tick'); TICK=D.pc()
 D.emit(lui(T3,0x3d), lw(T4,lo(MAGIC),T3), lui(T5,MAGICV>>16), ori(T5,T5,MAGICV&0xffff)); D.br('beq','inited',T4,T5); D.emit(NOP)
 D.emit(sw(T5,lo(MAGIC),T3), sw(ZERO,lo(FLAGS),T3), sw(ZERO,lo(REQ),T3), sw(ZERO,lo(STATE),T3), sw(ZERO,lo(STATE2),T3))
 D.label('inited')
-def lbu(rt,off,base): return 0x90000000|(base<<21)|(rt<<16)|(off&0xffff)
 def sltu(rd,rs,rt): return 0x0000002b|(rs<<21)|(rt<<16)|(rd<<11)
 def sll(rd,rt,sa): return 0x00000000|(rt<<16)|(rd<<11)|(sa<<6)
 def or_(rd,rs,rt): return 0x00000025|(rs<<21)|(rt<<16)|(rd<<11)
@@ -195,34 +195,39 @@ D.emit(jal(BUZZ), NOP)
 D.label('ret'); D.emit(lui(V1,0x37), jr(RA), NOP)
 # ---- god: entered by `j` from ApplyDamage+0 (delay slot 'clear f1' ran). a0 = character ----
 D.label('god'); GOD=D.pc()
-D.emit(lui(T2,0x3d), lw(T2,lo(FLAGS),T2), andi(T2,T2,1)); D.br('beq','normal',T2,ZERO); D.emit(NOP)
+D.emit(lui(T2,0x3d), lbu(T2,lo(FLAGS),T2), xori(T2,T2,1)); D.br('bne','normal',T2,ZERO); D.emit(NOP)   # god byte == 1
 D.emit(lui(T3,hi(GAME_PTR)), lw(T3,lo(GAME_PTR),T3)); D.br('beq','normal',T3,ZERO); D.emit(NOP)
 D.emit(lw(T3,0x10,T3)); D.br('bne','normal',T3,A0); D.emit(NOP)
 D.emit(jr(RA), NOP)                                           # player + god: no damage
 D.label('normal'); D.emit(addiu(29,29,-0x20), j(GOD_RESUME), NOP)
 # ---- ammo: hook lw a0,0(a1) @0x1751b0; delay slot did subu v1,v1,v0; next insn v1 = a0 - v1 ----
 D.label('ammo'); AMMO=D.pc()
-D.emit(lw(A0,0,A1), lui(AT,0x3d), lw(AT,lo(FLAGS),AT), andi(AT,AT,2)); D.br('beq','ammo_ret',AT,ZERO); D.emit(NOP)
+D.emit(lw(A0,0,A1), lui(AT,0x3d), lbu(AT,lo(FLAGS+1),AT), xori(AT,AT,1)); D.br('bne','ammo_ret',AT,ZERO); D.emit(NOP)   # ammo byte == 1
 D.emit(addiu(V1,ZERO,0)); D.label('ammo_ret'); D.emit(jr(RA), NOP)
 # ---- reload1: hook lw v1,0(a0) @0x1ad92c (delay slot addiu v1,-1 on stale v1, we redo) ----
 D.label('rl1'); RL1=D.pc()
-D.emit(lw(V1,0,A0), lui(AT,0x3d), lw(AT,lo(FLAGS),AT), andi(AT,AT,2)); D.br('bne','rl1_ret',AT,ZERO); D.emit(NOP)
+D.emit(lw(V1,0,A0), lui(AT,0x3d), lbu(AT,lo(FLAGS+1),AT), xori(AT,AT,1)); D.br('beq','rl1_ret',AT,ZERO); D.emit(NOP)
 D.emit(addiu(V1,V1,-1)); D.label('rl1_ret'); D.emit(jr(RA), NOP)
 # ---- reload2: hook lw v0,0(v1) @0x1ad9c8 ----
 D.label('rl2'); RL2=D.pc()
-D.emit(lw(V0,0,V1), lui(AT,0x3d), lw(AT,lo(FLAGS),AT), andi(AT,AT,2)); D.br('bne','rl2_ret',AT,ZERO); D.emit(NOP)
+D.emit(lw(V0,0,V1), lui(AT,0x3d), lbu(AT,lo(FLAGS+1),AT), xori(AT,AT,1)); D.br('beq','rl2_ret',AT,ZERO); D.emit(NOP)
 D.emit(addiu(V0,V0,-1)); D.label('rl2_ret'); D.emit(jr(RA), NOP)
 dw=D.done()
 SAVE=CAVE_D+4*len(dw); assert SAVE+4*len(save_regs)<=CAVE_D_END, hex(SAVE+4*len(save_regs))
 for i in SAVE_LUI: dw[i]=lui(AT,hi(SAVE))
 for i,k in SAVE_OFFS: dw[i]=(dw[i]&0xffff0000)|lo(SAVE+4*k)
-TRAINER_ENABLED=False   # 2026-08-27: with trainer core active the game ran at several x speed (car falls backward) even without 60fps; cause unknown -> disabled
+TRAINER_ENABLED=True    # joker mode (PS2-era cheat-device style): no per-frame code hook; pnach D-codes watch the pad word and write flag bytes
 trainer=[(CAVE_D+4*i,w) for i,w in enumerate(dw)]
-trainer+=[(SITE_TICK,jal(TICK)),(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]
+trainer+=[(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]   # tick hook (0x1f10cc) REMOVED: it caused several-x game speed
 if not TRAINER_ENABLED: trainer=[]
 trainer_state=[]   # state self-inits via MAGIC
 if TRAINER_ENABLED:
-    pass  # trainer groups emitted only when enabled (see git history for the group text)
+    R1,SQ,CI,CR,TR=0x0008,0x0080,0x0020,0x0040,0x0010
+    def joker(mask,addr,val): return [f"patch=1,EE,D{BUTTONS:07X},extended,{mask:08X}", f"patch=1,EE,0{addr:07X},extended,{val:08X}"]
+    lines+=["","[Trainer: hold R1 + Square=god ON, Circle=god OFF, Cross=ammo ON, Triangle=ammo OFF]","author=adam",
+            "description=Cheat-device style joker codes. God mode: R1+Square on / R1+Circle off. Infinite ammo + no reload: R1+Cross on / R1+Triangle off."]
+    lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]
+    lines+=joker(R1|SQ,FLAGS,1)+joker(R1|CI,FLAGS,0)+joker(R1|CR,FLAGS+1,1)+joker(R1|TR,FLAGS+1,0)
 EXTRA=trainer+trainer_state
 print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
 
