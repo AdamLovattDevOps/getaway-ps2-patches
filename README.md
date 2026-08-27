@@ -1,8 +1,11 @@
-# getaway-decomp
+# getaway-ps2-patches
 
-Reverse-engineering notes and a PCSX2 patch set for **The Getaway** (PS2, SCUS-97133, CRC `E21404E2`).
-Long-term goal: mission 1 running natively on x86-64 Linux. Current milestone: the game playable on
-PCSX2 with a modern camera.
+Quality-of-life patches for **The Getaway** (PS2, SCUS-97133, CRC `E21404E2`) on PCSX2, plus the
+reverse-engineering notes and tooling used to make them.
+
+This is **not a decompilation** (yet). It is binary patching: a few dozen words of hand-assembled
+MIPS in unused space in the original executable, applied at runtime via PCSX2's pnach system.
+The RE notes are the groundwork for a possible native port later; that work lives in `NOTES.md`.
 
 No game data is in this repo. You need your own disc image.
 
