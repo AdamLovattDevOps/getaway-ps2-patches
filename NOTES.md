@@ -85,6 +85,12 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
   by a branch (jal's delay slot may not be a branch); hook the preceding load and redo the op in the stub.
   ApplyDamage entry hooked with `j` (not jal) so the caller's ra survives; god = plain `jr ra`.
 
+## Trainer DISABLED (TRAINER_ENABLED=False) 2026-08-27
+- With trainer core active (no 60fps), gameplay ran several x speed ("car falls backward, world flies by").
+  Suspects, untested: the tick hook at 0x1f10cc inside the frame/vsync function (a jal mid-function in
+  timing code), or PCSX2 recompiler interaction with the self-init writes. Cheat sites themselves
+  (god/ammo/reload) are unlikely to affect speed. Next time: bisect by enabling hooks one at a time.
+
 ## Trainer v2: toggles via PCSX2's own menu (no in-game text rendering needed)
 - Adam wanted a menu, not combos. PCSX2 Big Picture pause menu -> Game Properties -> Cheats toggles pnach
   groups live, BUT PCSX2 never restores memory when a group is disabled. So each toggle group writes one

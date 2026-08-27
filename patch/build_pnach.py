@@ -216,14 +216,13 @@ dw=D.done()
 SAVE=CAVE_D+4*len(dw); assert SAVE+4*len(save_regs)<=CAVE_D_END, hex(SAVE+4*len(save_regs))
 for i in SAVE_LUI: dw[i]=lui(AT,hi(SAVE))
 for i,k in SAVE_OFFS: dw[i]=(dw[i]&0xffff0000)|lo(SAVE+4*k)
+TRAINER_ENABLED=False   # 2026-08-27: with trainer core active the game ran at several x speed (car falls backward) even without 60fps; cause unknown -> disabled
 trainer=[(CAVE_D+4*i,w) for i,w in enumerate(dw)]
 trainer+=[(SITE_TICK,jal(TICK)),(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_RELOAD2,jal(RL2))]
+if not TRAINER_ENABLED: trainer=[]
 trainer_state=[]   # state self-inits via MAGIC
-lines+=["","[Trainer core (required by the toggles below)]","author=adam","description=Hooks for the God mode / Infinite ammo toggles. Toggle those from PCSX2's pause menu (Big Picture > Game Properties > Cheats)."]
-lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]
-# each toggle group ORs its bit into REQ every vsync via PCSX2's 'bitor' type? not available -> use separate REQ bytes
-lines+=["","[God mode]","author=adam","description=Player takes no damage.",f"patch=1,EE,{REQ:08x},byte,00000001"]
-lines+=["","[Infinite ammo + no reload]","author=adam","description=Ammo and clip never decrease.",f"patch=1,EE,{REQ+1:08x},byte,00000001"]
+if TRAINER_ENABLED:
+    pass  # trainer groups emitted only when enabled (see git history for the group text)
 EXTRA=trainer+trainer_state
 print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
 

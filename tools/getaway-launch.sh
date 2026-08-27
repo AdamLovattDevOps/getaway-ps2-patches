@@ -10,4 +10,4 @@ A=/sys/class/firmware-attributes/lenovo-wmi-other-0/attributes
 echo 30 | sudo -n tee $A/ppt_pl1_spl/current_value  >/dev/null 2>&1
 echo 32 | sudo -n tee $A/ppt_pl2_sppt/current_value >/dev/null 2>&1
 echo "PPT: pl1=$(cat $A/ppt_pl1_spl/current_value)W pl2=$(cat $A/ppt_pl2_sppt/current_value)W"
-exec ~/Applications/pcsx2-Qt.AppImage -bigpicture -fullscreen "$ISO"
+exec ~/Applications/pcsx2-Qt.AppImage -fullscreen "$ISO"
