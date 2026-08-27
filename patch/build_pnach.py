@@ -222,12 +222,13 @@ trainer+=[(SITE_GOD,j(GOD)),(SITE_AMMO,jal(AMMO)),(SITE_RELOAD1,jal(RL1)),(SITE_
 if not TRAINER_ENABLED: trainer=[]
 trainer_state=[]   # state self-inits via MAGIC
 if TRAINER_ENABLED:
-    R1,SQ,CI,CR,TR=0x0008,0x0080,0x0020,0x0040,0x0010
-    def joker(mask,addr,val): return [f"patch=1,EE,D{BUTTONS:07X},extended,{mask:08X}", f"patch=1,EE,0{addr:07X},extended,{val:08X}"]
-    lines+=["","[Trainer: hold R1 + Square=god ON, Circle=god OFF, Cross=ammo ON, Triangle=ammo OFF]","author=adam",
-            "description=Cheat-device style joker codes. God mode: R1+Square on / R1+Circle off. Infinite ammo + no reload: R1+Cross on / R1+Triangle off."]
+    # Menu-driven (PCSX2 pause menu -> Game Properties -> Cheats). pnach lines apply in file order every vsync:
+    # core zeroes the flag bytes, an enabled toggle group re-writes 1 after it. Disable the group -> stays 0.
+    lines+=["","[Trainer core (needed by God mode / Infinite ammo)]","author=adam","description=Hooks + flag reset. Toggle the cheats below from the pause menu (L3)."]
     lines+=[f"patch=1,EE,{a:08x},word,{w:08x}" for a,w in trainer]
-    lines+=joker(R1|SQ,FLAGS,1)+joker(R1|CI,FLAGS,0)+joker(R1|CR,FLAGS+1,1)+joker(R1|TR,FLAGS+1,0)
+    lines+=[f"patch=1,EE,{FLAGS:08x},byte,00000000", f"patch=1,EE,{FLAGS+1:08x},byte,00000000"]
+    lines+=["","[God mode]","author=adam","description=Player takes no damage.", f"patch=1,EE,{FLAGS:08x},byte,00000001"]
+    lines+=["","[Infinite ammo + no reload]","author=adam","description=Ammo and clip never decrease.", f"patch=1,EE,{FLAGS+1:08x},byte,00000001"]
 EXTRA=trainer+trainer_state
 print(f"trainer: buzz={BUZZ:08x} tick={TICK:08x} god={GOD:08x} ammo={AMMO:08x} rl1={RL1:08x} rl2={RL2:08x} save={SAVE:08x} words={len(dw)}")
 

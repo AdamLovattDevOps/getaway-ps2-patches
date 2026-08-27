@@ -124,9 +124,9 @@ patch=1,EE,003d6fcc,word,46052100
 patch=1,EE,003d6fd0,word,03e00008
 patch=1,EE,003d6fd4,word,00000000
 
-[Trainer: hold R1 + Square=god ON, Circle=god OFF, Cross=ammo ON, Triangle=ammo OFF]
+[Trainer core (needed by God mode / Infinite ammo)]
 author=adam
-description=Cheat-device style joker codes. God mode: R1+Square on / R1+Circle off. Infinite ammo + no reload: R1+Cross on / R1+Triangle off.
+description=Hooks + flag reset. Toggle the cheats below from the pause menu (L3).
 patch=1,EE,003d6fe8,word,3c01003d
 patch=1,EE,003d6fec,word,ac247188
 patch=1,EE,003d6ff0,word,ac25718c
@@ -235,14 +235,18 @@ patch=1,EE,00174ba0,word,080f5c36
 patch=1,EE,001751b0,word,0c0f5c47
 patch=1,EE,001ad92c,word,0c0f5c50
 patch=1,EE,001ad9c8,word,0c0f5c59
-patch=1,EE,D03DC240,extended,00000088
-patch=1,EE,003D6FD8,extended,00000001
-patch=1,EE,D03DC240,extended,00000028
-patch=1,EE,003D6FD8,extended,00000000
-patch=1,EE,D03DC240,extended,00000048
-patch=1,EE,003D6FD9,extended,00000001
-patch=1,EE,D03DC240,extended,00000018
-patch=1,EE,003D6FD9,extended,00000000
+patch=1,EE,003d6fd8,byte,00000000
+patch=1,EE,003d6fd9,byte,00000000
+
+[God mode]
+author=adam
+description=Player takes no damage.
+patch=1,EE,003d6fd8,byte,00000001
+
+[Infinite ammo + no reload]
+author=adam
+description=Ammo and clip never decrease.
+patch=1,EE,003d6fd9,byte,00000001
 
 [Skip cutscenes with Start]
 author=adam
