@@ -85,6 +85,16 @@ Milestone 1 (done): right-stick car-camera orbit as a PCSX2 pnach, running at 60
   by a branch (jal's delay slot may not be a branch); hook the preceding load and redo the op in the stub.
   ApplyDamage entry hooked with `j` (not jal) so the caller's ra survives; god = plain `jr ra`.
 
+## Trainer v2: toggles via PCSX2's own menu (no in-game text rendering needed)
+- Adam wanted a menu, not combos. PCSX2 Big Picture pause menu -> Game Properties -> Cheats toggles pnach
+  groups live, BUT PCSX2 never restores memory when a group is disabled. So each toggle group writes one
+  REQ byte (0x3d6fdc+n) every vsync; the per-frame tick latches REQ bytes -> FLAGS bits and clears REQ.
+  Disable the group -> the byte stops being written -> next tick latches 0. Stubs read FLAGS.
+- MAGIC word 0x3d6fe0 (never pnach-written; boots as ELF string bytes) gates a one-time zero of
+  FLAGS/REQ/STATE/STATE2 — robust regardless of whether patch=0 runs before or after ELF load.
+- Launcher runs `-bigpicture`; existing hotkey OpenPauseMenu = Back+RightStick (Select+R3).
+- Drawing our own text would mean driving MenuString/TextBox glyph lists (FUN_00249ae0) — deferred.
+
 ## PCSX2 / performance
 - CRC E21404E2 (= XOR of u32 words of the ELF; confirmed by PCSX2's gamesettings filename).
 - pnach in `~/.config/PCSX2/cheats/E21404E2.pnach`; labeled group + `[Cheats] Enable = <name>`
